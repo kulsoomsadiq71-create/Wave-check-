@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2F6BFF">
+<title>Wavecheck: wifi speed test</title>
+<style>
+:root{--bg:#EAF1F7;--surface:#fff;--ink:#12263A;--muted:#4F6377;--line:#C9D8E6;--signal:#2F6BFF;--on:#fff;--good:#12957D;--bad:#C0392B}
+@media (prefers-color-scheme:dark){:root{--bg:#0F1B28;--surface:#16273A;--ink:#E8F0F8;--muted:#9DB2C6;--line:#294159;--signal:#6C97FF;--on:#0F1B28;--good:#3CCBB0;--bad:#FF8A7A}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1rem/1.5 system-ui,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:480px;margin:0 auto;padding:1.25rem}
+h1{font-size:1.4rem;margin:.5rem 0 1rem;letter-spacing:-.02em}
+.card{background:var(--surface);border:1.5px solid var(--line);border-radius:20px;padding:1.25rem;margin-bottom:1rem}
+.gauge{text-align:center}
+svg{width:100%;max-width:300px}
+.track,.fill{fill:none;stroke-width:16;stroke-linecap:round}
+.track{stroke:var(--line)}
+.fill{stroke:var(--signal);stroke-dasharray:283;stroke-dashoffset:283}
+.big{font-size:3rem;font-weight:800;line-height:1;margin-top:-3.2rem;position:relative}
+.big small{font-size:1rem;font-weight:500;color:var(--muted)}
+.phase{color:var(--muted);min-height:1.5em;margin:.4rem 0 1rem}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;text-align:center;margin-bottom:1rem}
+.stats b{display:block;font-size:1.15rem}
+.stats span{font-size:.8rem;color:var(--muted)}
+label{display:block;font-size:.9rem;color:var(--muted);margin-bottom:.3rem}
+input{width:100%;font:inherit;padding:.7rem .8rem;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);margin-bottom:1rem}
+button{font:600 1rem inherit;font-family:inherit;border:0;border-radius:12px;padding:.9rem 1.2rem;cursor:pointer;background:var(--signal);color:var(--on);width:100%}
+button:disabled{opacity:.6;cursor:wait}
+button.link{background:none;color:var(--muted);width:auto;padding:.3rem;font-weight:500;font-size:.85rem}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.verdict{font-weight:600;color:var(--good);margin:0 0 1rem;min-height:1.5em;text-align:center}
+.verdict.err{color:var(--bad)}
+.hh{display:flex;justify-content:space-between;align-items:center}
+.hh h2{font-size:1.05rem;margin:0}
+ul{list-style:none;margin:.5rem 0 0;padding:0}
+li{display:flex;justify-content:space-between;gap:1rem;padding:.6rem 0;border-top:1px solid var(--line);font-size:.95rem}
+li span:last-child{color:var(--muted);text-align:right}
+.empty{color:var(--muted);margin:.5rem 0 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Wavecheck</h1>
+  <div class="card gauge">
+    <svg viewBox="0 0 220 125" aria-hidden="true"><path class="track" d="M20 110 A90 90 0 0 1 200 110"/><path class="fill" id="fill" d="M20 110 A90 90 0 0 1 200 110"/></svg>
+    <div class="big"><span id="num">0</span><small> Mbps</small></div>
+    <div class="phase" id="phase" aria-live="polite">Ready</div>
+    <div class="stats">
+      <div><b id="ping">-</b><span>Ping ms</span></div>
+      <div><b id="jit">-</b><span>Jitter ms</span></div>
+      <div><b id="dl">-</b><span>Down Mbps</span></div>
+      <div><b id="ul">-</b><span>Up Mbps</span></div>
+    </div>
+    <p class="verdict" id="verdict"></p>
+    <label for="room">Room (optional)</label>
+    <input id="room" type="text" placeholder="e.g. Living room" maxlength="40" autocomplete="off">
+    <button id="go" type="button">Start test</button>
+  </div>
+  <div class="card">
+    <div class="hh"><h2>History</h2><button class="link" id="clear" type="button">Clear</button></div>
+    <ul id="hist"></ul>
+    <p class="empty" id="empty">No tests yet. Run one in each room to compare.</p>
+  </div>
+</main>
+<script>
+(function(){
+var BASE='https://speed.cloudflare.com/';
+var $=function(i){return document.getElementById(i)};
+var fill=$('fill'),num=$('num'),phase=$('phase'),go=$('go'),verdict=$('verdict');
+var MAX=500;
+function gauge(n){fill.style.strokeDashoffset=283-283*Math.min(n/MAX,1);num.textContent=n>=100?Math.round(n):n.toFixed(1)}
+function setPhase(t){phase.textContent=t}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+
+async function latency(){
+  var t=[];
+  for(var i=0;i<10;i++){
+    var s=performance.now();
+    await fetch(BASE+'__down?bytes=0&r='+Math.random(),{cache:'no-store'});
+    t.push(performance.now()-s);
+  }
+  t.shift();
+  var sorted=t.slice().sort(function(a,b){return a-b});
+  var ping=sorted[Math.floor(sorted.length/2)];
+  var j=0;for(var k=1;k<t.length;k++)j+=Math.abs(t[k]-t[k-1]);
+  return {ping:ping,jitter:j/(t.length-1)};
+}
+
+async function download(ms){
+  var ctrl=new AbortController(),bytes=0,t0=performance.now(),stopped=false;
+  var timer=setTimeout(function(){stopped=true;ctrl.abort()},ms);
+  var ui=setInterval(function(){var s=(performance.now()-t0)/1000;if(s>.5)gauge(bytes*8/s/1e6)},150);
+  async function worker(){
+    while(!stopped){
+      try{
+        var res=await fetch(BASE+'__down?bytes=25000000&r='+Math.random(),{signal:ctrl.signal,cache:'no-store'});
+        var rd=res.body.getReader();
+        for(;;){var c=await rd.read();if(c.done)break;bytes+=c.value.length}
+      }catch(e){if(stopped)return;throw e}
+    }
+  }
+  try{await Promise.all([worker(),worker(),worker(),worker()])}finally{clearTimeout(timer);clearInterval(ui)}
+  return bytes*8/((performance.now()-t0)/1000)/1e6;
+}
+
+async function upload(ms){
+  var chunk=new Uint8Array(1000000);
+  for(var o=0;o<chunk.length;o+=65536)crypto.getRandomValues(chunk.subarray(o,Math.min(o+65536,chunk.length)));
+  var bytes=0,t0=performance.now(),stopped=false;
+  var timer=setTimeout(function(){stopped=true},ms);
+  var ui=setInterval(function(){var s=(performance.now()-t0)/1000;if(s>.5)gauge(bytes*8/s/1e6)},150);
+  async function worker(){
+    while(!stopped){
+      await fetch(BASE+'__up',{method:'POST',body:chunk,cache:'no-store'});
+      bytes+=chunk.length;
+    }
+  }
+  try{await Promise.all([worker(),worker(),worker()])}finally{clearTimeout(timer);clearInterval(ui)}
+  return bytes*8/((performance.now()-t0)/1000)/1e6;
+}
+
+function judge(d){
+  return d>=200?'Great for 4K streaming and gaming':d>=75?'Good for video calls and streaming':d>=25?'Fine for browsing and HD video':'Slow. Try moving closer to the router';
+}
+
+var KEY='wavecheck_history';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return []}}
+function save(a){try{localStorage.setItem(KEY,JSON.stringify(a))}catch(e){}}
+var hist=load();
+function render(){
+  var ul=$('hist');ul.innerHTML='';
+  $('empty').style.display=hist.length?'none':'block';
+  hist.forEach(function(h){
+    var li=document.createElement('li'),a=document.createElement('span'),b=document.createElement('span');
+    a.textContent=h.room||'Unnamed';
+    b.textContent=h.dl.toFixed(0)+' down / '+h.ul.toFixed(0)+' up Mbps, '+Math.round(h.ping)+' ms';
+    li.appendChild(a);li.appendChild(b);ul.appendChild(li);
+  });
+}
+render();
+$('clear').addEventListener('click',function(){hist=[];save(hist);render()});
+
+go.addEventListener('click',async function(){
+  go.disabled=true;verdict.textContent='';verdict.className='verdict';
+  ['ping','jit','dl','ul'].forEach(function(i){$(i).textContent='-'});
+  gauge(0);
+  try{
+    setPhase('Checking ping…');
+    var l=await latency();
+    $('ping').textContent=Math.round(l.ping);$('jit').textContent=Math.round(l.jitter);
+    setPhase('Testing download…');
+    var d=await download(8000);
+    $('dl').textContent=d.toFixed(1);gauge(d);await sleep(500);
+    setPhase('Testing upload…');gauge(0);
+    var u=await upload(6000);
+    $('ul').textContent=u.toFixed(1);gauge(d);
+    setPhase('Done');
+    verdict.textContent=judge(d);
+    hist.unshift({room:$('room').value.trim(),dl:d,ul:u,ping:l.ping,t:Date.now()});
+    hist=hist.slice(0,20);save(hist);render();
+  }catch(e){
+    setPhase('Test stopped');
+    verdict.className='verdict err';
+    verdict.textContent='Could not reach the test server. Check your connection and try again.';
+  }
+  go.disabled=false;
+  go.textContent='Test again';
+});
+})();
+</script>
+</body>
+</html>
