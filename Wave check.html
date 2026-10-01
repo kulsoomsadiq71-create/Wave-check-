@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wavecheck: know your wifi speed in every room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EAF1F7; --surface:#FFFFFF; --ink:#12263A; --muted:#4F6377; --line:#C9D8E6;
+  --signal:#2F6BFF; --signal-ink:#FFFFFF; --good:#12957D;
+  --head:"Bricolage Grotesque","Trebuchet MS",sans-serif; --body:"Figtree","Segoe UI",system-ui,sans-serif;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#0F1B28;--surface:#16273A;--ink:#E8F0F8;--muted:#9DB2C6;--line:#294159;--signal:#6C97FF;--signal-ink:#0F1B28;--good:#3CCBB0}
+}
+:root[data-theme="dark"]{--bg:#0F1B28;--surface:#16273A;--ink:#E8F0F8;--muted:#9DB2C6;--line:#294159;--signal:#6C97FF;--signal-ink:#0F1B28;--good:#3CCBB0}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.05rem/1.6 var(--body)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 1.25rem}
+nav{display:flex;justify-content:space-between;align-items:center;padding:1.25rem 0}
+.right{display:flex;align-items:center;gap:.75rem}
+.region{display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden}
+.region button{font:600 .9rem var(--body);background:transparent;color:var(--muted);border:0;padding:.65rem .9rem;cursor:pointer}
+.region button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.region button:focus-visible{outline:3px solid var(--signal);outline-offset:-3px}
+.logo{font:800 1.3rem var(--head);letter-spacing:-.02em}
+a{color:inherit}
+.btn{display:inline-block;background:var(--signal);color:var(--signal-ink);font:600 1rem var(--body);padding:.8rem 1.4rem;border-radius:10px;text-decoration:none;border:0;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:2.5rem;align-items:center;padding:3rem 0 4rem}
+h1{font:800 clamp(2.4rem,6vw,4rem)/1.02 var(--head);letter-spacing:-.03em;margin:0 0 1rem;max-width:12ch}
+.lede{color:var(--muted);max-width:44ch;margin:0 0 1.75rem}
+.actions{display:flex;gap:.75rem;flex-wrap:wrap}
+.meter{background:var(--surface);border:1.5px solid var(--line);border-radius:22px;padding:1.5rem 1.5rem 1.25rem;text-align:center}
+.meter svg{width:100%;max-width:320px;height:auto}
+.track{fill:none;stroke:var(--line);stroke-width:18;stroke-linecap:round}
+.fill{fill:none;stroke:var(--signal);stroke-width:18;stroke-linecap:round;stroke-dasharray:283;stroke-dashoffset:283}
+.reading{font:800 3.4rem/1 var(--head);margin:-3.6rem 0 0;position:relative}
+.reading small{font:500 1rem var(--body);color:var(--muted);margin-left:.3rem}
+.verdict{color:var(--good);font-weight:600;margin:.4rem 0 1rem;min-height:1.6em}
+.note{color:var(--muted);font-size:.85rem;margin:.75rem 0 0}
+section{padding:3.5rem 0;border-top:1.5px solid var(--line)}
+h2{font:800 clamp(1.7rem,4vw,2.4rem)/1.1 var(--head);letter-spacing:-.02em;margin:0 0 2rem;max-width:20ch}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem}
+h3{font:600 1.2rem var(--head);margin:0 0 .4rem}
+.features p,.steps p{color:var(--muted);margin:0}
+.steps{list-style:none;counter-reset:s;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,1fr);gap:2rem}
+.steps li{counter-increment:s}
+.steps li::before{content:counter(s);display:grid;place-items:center;width:2.2rem;height:2.2rem;border-radius:50%;background:var(--signal);color:var(--signal-ink);font:800 1rem var(--head);margin-bottom:.75rem}
+.cta{background:var(--surface);border:1.5px solid var(--line);border-radius:22px;padding:2.5rem;margin:1rem 0 3rem}
+.cta h2{margin-bottom:1rem}
+footer{color:var(--muted);font-size:.9rem;padding:0 0 2rem}
+@media (max-width:760px){
+  .hero,.features,.steps{grid-template-columns:1fr}
+  .hero{padding-top:1.5rem}
+  .cta{padding:1.75rem}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <span class="logo">Wavecheck</span>
+    <div class="right"><div class="region" role="group" aria-label="Region"><button type="button" data-r="us" aria-pressed="true">US</button><button type="button" data-r="uk" aria-pressed="false">UK</button></div><a class="btn ghost" href="#get">Get the app</a></div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <h1>Find out why your wifi is slow.</h1>
+      <p class="lede">Wavecheck tests your connection in seconds, then shows which rooms are fast, which are weak, and when it slows down.</p>
+      <div class="actions">
+        <a class="btn" href="#get">Download free</a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+    </div>
+    <div class="meter" aria-live="polite">
+      <svg viewBox="0 0 220 125" role="img" aria-label="Speed gauge">
+        <path class="track" d="M20 110 A90 90 0 0 1 200 110"/>
+        <path class="fill" id="fill" d="M20 110 A90 90 0 0 1 200 110"/>
+      </svg>
+      <div class="reading"><span id="num">0</span><small>Mbps</small></div>
+      <div class="verdict" id="verdict"></div>
+      <button class="btn" id="run" type="button">Run demo test</button>
+      <p class="note">Demo with sample numbers. The app measures your real connection.</p>
+    </div>
+  </header>
+
+  <section>
+    <h2>See the whole house, not just one number</h2>
+    <div class="features">
+      <div><h3>Room-by-room results</h3><p>Walk around with your phone and tag each room. Wavecheck shows where the signal drops.</p></div>
+      <div><h3>History you can read</h3><p>Check speeds by hour and by day to catch evening slowdowns before you call your <span data-uk="broadband provider">internet provider</span>.</p></div>
+      <div><h3>Plain-language results</h3><p>Each test says what your speed is good for: video calls, 4K streaming, or online gaming.</p></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>Three steps to a clear answer</h2>
+    <ol class="steps">
+      <li><h3>Open the app</h3><p>Tap Test. It takes about 15 seconds.</p></li>
+      <li><h3>Tag the room</h3><p>Name where you're standing so results stay <span data-uk="organised">organized</span>.</p></li>
+      <li><h3>Compare</h3><p>Repeat in other rooms and see which spots need a fix.</p></li>
+    </ol>
+  </section>
+
+  <section id="get">
+    <div class="cta">
+      <h2>Test your wifi now</h2>
+      <p class="lede">Free to download. No account needed for your first test.</p>
+      <a class="btn" href="#get">Download Wavecheck</a>
+    </div>
+  </section>
+
+  <footer>© 2026 <span data-uk="Wavecheck Ltd">Wavecheck, Inc.</span> Placeholder name and copy.</footer>
+</div>
+
+<script>
+(function(){
+  var fill=document.getElementById('fill'),num=document.getElementById('num'),v=document.getElementById('verdict'),btn=document.getElementById('run');
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function verdict(n){return n>=200?'Great for 4K and gaming':n>=75?'Good for video calls and streaming':n>=25?'Fine for browsing and HD video':'Slow. Try moving closer to the router'}
+  function show(n){fill.style.strokeDashoffset=283-283*Math.min(n/300,1);num.textContent=Math.round(n);v.textContent=verdict(n)}
+  function run(){
+    var target=20+Math.random()*260;
+    if(reduce){show(target);return}
+    btn.disabled=true;v.textContent='Testing…';
+    fill.style.transition='none';
+    var start=null,dur=1800;
+    function tick(t){
+      if(!start)start=t;
+      var p=Math.min((t-start)/dur,1),e=1-Math.pow(1-p,3);
+      var n=target*e;
+      fill.style.strokeDashoffset=283-283*Math.min(n/300,1);
+      num.textContent=Math.round(n);
+      if(p<1)requestAnimationFrame(tick);else{v.textContent=verdict(target);btn.disabled=false}
+    }
+    requestAnimationFrame(tick);
+  }
+  btn.addEventListener('click',run);
+  run();
+  var items=[].slice.call(document.querySelectorAll('[data-uk]'));
+  items.forEach(function(e){e.setAttribute('data-us',e.textContent)});
+  var rb=[].slice.call(document.querySelectorAll('.region button'));
+  function setRegion(r){
+    items.forEach(function(e){e.textContent=e.getAttribute(r==='uk'?'data-uk':'data-us')});
+    rb.forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-r')===r))});
+    document.documentElement.lang=r==='uk'?'en-GB':'en-US';
+  }
+  rb.forEach(function(b){b.addEventListener('click',function(){setRegion(b.getAttribute('data-r'))})});
+  setRegion(/^en-GB|^en-IE/i.test(navigator.language||'')?'uk':'us');
+})();
+</script>
+</body>
+</html>
